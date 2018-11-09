@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+const (
+	free = iota
+	working
+)
+
 // if a latency haven't got new input in last 300 seconds, set it with zero
 var timeout int64 = 300
 
@@ -13,7 +18,7 @@ type Latency struct {
 	record         []int32
 	index          int8
 	averageLatency int32
-	input          chan byte
+	flag           int32
 	lastInsertTime int64
 }
 
@@ -21,7 +26,6 @@ type Latency struct {
 func NewLatency() *Latency {
 	return &Latency{
 		record: make([]int32, 10),
-		input:  make(chan byte, 1),
 	}
 }
 
@@ -32,9 +36,7 @@ func (l *Latency) Input(input time.Duration) {
 		return
 	}
 
-	select {
-	case l.input <- 1:
-	default:
+	if !atomic.CompareAndSwapInt32(&l.flag, free, working) {
 		return
 	}
 
@@ -50,7 +52,7 @@ func (l *Latency) Input(input time.Duration) {
 	// If record is not filled, insert directly
 	if old == 0 {
 		l.record[l.index] = t
-		atomic.StoreInt32(&l.averageLatency, (l.averageLatency*int32(l.index)+t)/(int32(l.index)+1))
+		atomic.AddInt32(&l.averageLatency, (t-l.averageLatency)/(int32(l.index)+1))
 		l.index = l.index + 1
 		if l.index == 10 {
 			l.index = 0
@@ -61,10 +63,10 @@ func (l *Latency) Input(input time.Duration) {
 		if l.index == 10 {
 			l.index = 0
 		}
-		atomic.StoreInt32(&l.averageLatency, l.averageLatency+(t-old)/(10))
+		atomic.AddInt32(&l.averageLatency, (t-old)/(10))
 	}
 	atomic.StoreInt64(&l.lastInsertTime, time.Now().Unix())
-	<-l.input
+	atomic.StoreInt32(&l.flag, free)
 }
 
 // Get ...
