@@ -1,3 +1,3 @@
-# latency_counter
-
-    A unblock latency counter
+# 定长队列平均值计算器
+  
+   可以记录最近几个数字的平均值。可用于记录\查看请求延迟
